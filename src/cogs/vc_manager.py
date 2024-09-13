@@ -28,6 +28,7 @@ class VoiceChannelManager(commands.Cog):
             try:
                 temp_channel = await guild.create_voice_channel(name=f"{member.display_name}'s Channel", category=category)
                 self.temp_channels[temp_channel.id] = temp_channel
+                logger.info(f'created vc: {temp_channel}')
                 await member.move_to(temp_channel)
             except Exception as e:
                 logger.error(f'channel creation error: {e}')
@@ -36,6 +37,7 @@ class VoiceChannelManager(commands.Cog):
             if len(before.channel.members) == 0:
                 try:
                     await before.channel.delete()
+                    logger.info(f'removed vc: {before.channel}')
                     del self.temp_channels[before.channel.id]
                 except Exception as e:
                     logger.error(f'channel deletion error: {e}')
