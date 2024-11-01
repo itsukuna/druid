@@ -4,10 +4,14 @@ import logging
 
 from discord.ext import commands
 
+# Fetch bot token from environment
 token = os.getenv("discord_token")
+if not token:
+    raise ValueError("No 'discord_token' environment variable found.")
 
 logger = logging.getLogger("discord")
 
+# Set up intents
 intents = discord.Intents.all()
 intents.members = True
 intents.voice_states = True
@@ -22,7 +26,15 @@ async def on_ready():
     logger.info('Loading extensions:')
 
 
+@bot.event
+async def on_disconnect():
+    logger.info(f"{bot.user} has disconnected from Discord.")
+
+
 def load_cogs():
+    """
+    Dynamically load all cogs from the src/cogs directory.
+    """
     cogs = [f"src.cogs.{filename[:-3]}" for filename in os.listdir(
         "./src/cogs") if filename.endswith(".py")]
     for cog in cogs:
