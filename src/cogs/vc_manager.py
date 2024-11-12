@@ -84,7 +84,7 @@ class VoiceChannelManager(commands.Cog):
     async def clean_temp_vc(self, ctx):
         await ctx.defer()
         guild = ctx.guild
-        logger.info(f"Cleaning temporary VCs for server: {guild.name}")
+        logger.info(f"Cleaning temporary voice channels for server: {guild.name}")
 
         if str(guild.id) in self.temp_channels:
             temp_channel_ids = self.temp_channels[str(guild.id)]
@@ -116,7 +116,7 @@ class VoiceChannelManager(commands.Cog):
                 "lobby_category": "voice lobby",
                 "channels": [
                     {
-                        "name": "rules and commands",
+                        "name": "rules-and-commands",
                         "type": "text"
                     },
                     {
@@ -168,7 +168,7 @@ class VoiceChannelManager(commands.Cog):
             active_category = discord.utils.get(guild.categories, name=config_data["active_category"])
             if not active_category:
                 active_category = await guild.create_category(config_data["active_category"])
-                await asyncio.sleep(1)
+                await asyncio.sleep(.5)
 
             self.active_channels = active_category.name  # Update to track the active category
 
