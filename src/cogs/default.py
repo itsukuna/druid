@@ -14,7 +14,7 @@ class Default(commands.Cog):
     @commands.slash_command(name='ping')
     async def ping(self, ctx):
         try:
-            await ctx.send(f'Pong {round(self.bot.latency * 100)}ms!')
+            await ctx.respond(f'Pong {round(self.bot.latency * 100)}ms!')
         except Exception as e:
             logger.info(f'command execution error: {e}')
 
