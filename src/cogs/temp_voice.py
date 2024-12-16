@@ -287,7 +287,7 @@ class TempVoice(commands.Cog):
         if user.voice and user.voice.channel== channel:
             try:
                 await user.move_to(None)
-                await ctx.respond(f"✅ {user.display_name} has been disconnected from **{channel.name}**.")
+                await ctx.respond(f"✅ {user.display_name} has been disconnected from **{channel.name}**.", ephemeral=True)
             except discord.Forbidden:
                 await ctx.respond("I lack the necessary permissions to disconnect this user.", ephemeral=True)
             except discord.HTTPException as e:
