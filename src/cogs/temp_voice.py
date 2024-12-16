@@ -1,6 +1,6 @@
 from discord.ext import commands
-from discord.ui import View, Button, Modal, InputText
-
+from discord.ui import View
+from discord import Option
 import discord
 import logging
 import os
@@ -128,10 +128,11 @@ class TempVoice(commands.Cog):
                     logger.error(f"Error creating rules channel: {e}")
                     return
 
-    voice = discord.SlashCommandGroup(name="voice", description="commands related to TempVoice")
+    voice = discord.SlashCommandGroup(name="voice", description="TempVoice related commands")
 
     @voice.command(name="clean", description="Clean temporary voice channels")
     @commands.guild_only()
+    @commands.has_permissions(manage_channels=True)
     async def clean(self, ctx):
         guild = ctx.guild
         logger.info(f"Cleaning temporary voice channels for server: {guild.name}")
@@ -186,6 +187,7 @@ class TempVoice(commands.Cog):
             await ctx.respond("Configuration already exists.", ephemeral=True)
 
     @voice.command(name="reset", description="Resets the config file and removes channels")
+    @commands.has_permissions(manage_channels=True)
     async def reset(self, ctx):
         await ctx.defer(ephemeral=True)
         if os.path.exists(config_path):
@@ -267,6 +269,209 @@ class TempVoice(commands.Cog):
         except discord.HTTPException as e:
             logger.error(f"Failed to rename channel: {e}")
             await ctx.respond("Failed to rename the channel. Please try again later.", ephemeral=True)
+
+    @voice.command(name="kick", description="Disconnects a member from current voice channel.")
+    async def kick(self, ctx: discord.ApplicationContext, user:discord.Member):
+        """
+        Disconnect the selected member from current voice channel.
+
+        Parameters:
+            ctx: The application context of the command.
+            name: Partial or full name of the member to search.
+        """
+        if not ctx.guild:
+            await ctx.respond("This command can only be used in a server.", ephemeral=True)
+            return
+        
+        channel= ctx.author.voice.channel
+        if user.voice and user.voice.channel== channel:
+            try:
+                await user.move_to(None)
+                await ctx.respond(f"✅ {user.display_name} has been disconnected from **{channel.name}**.")
+            except discord.Forbidden:
+                await ctx.respond("I lack the necessary permissions to disconnect this user.", ephemeral=True)
+            except discord.HTTPException as e:
+                await ctx.respond(f"Failed to disconnect the user: {e}", ephemeral=True)
+        else:
+            await ctx.respond(f"{user.display_name} is not in your current voice channel.", ephemeral=True)
+
+
+    @voice.command(name="limit", description="Sets user limits to current voice channel")
+    async def limit(self, ctx: discord.ApplicationContext, limit:int):
+        """
+        Sets a user limit for the current voice channel.
+
+        Parameters:
+            ctx: The application context of the command.
+            limit: The maximum number of users allowed in the channel.
+        """
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.respond("You must be in a voice channel to use this command", ephemeral=True)
+            return
+        
+        channel = ctx.author.voice.channel
+        if limit < 0 and limit > 99:
+            await ctx.respond("Please provide limit between 0(no limit) and 99.", ephemeral=True)
+            return
+        
+        try:
+            await channel.edit(user_limit=limit)
+            await ctx.respond(f"The user limit for **{channel.name}** has been set to **{limit}**.", ephemeral=True)
+
+        except discord.Forbidden:
+            await ctx.respond("I don't have permission to edit this channel.", ephemeral=True)
+
+        except discord.HTTPException as e:
+            await ctx.respond(f"Failed to set the user limit: {e}", ephemeral=True)
+
+    @voice.command(name="invite", description="Create a custom invite link for the current voice channel.")
+    async def invite(
+        self,
+        ctx: discord.ApplicationContext,
+        max_age: int = 3600,
+        max_uses: int = 5
+    ):
+        """
+        Parameters:
+            max_age: The duration (in seconds) before the invite expires.
+            max_uses: The maximum number of uses for the invite.
+        """
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.respond("You must be in a voice channel to use this command.", ephemeral=True)
+            return
+
+        # Validate max_age and max_uses
+        if max_age <= 0 or max_age > 86400:  # Max age can't exceed 24 hours (86400 seconds)
+            await ctx.respond("Invite expiration time must be between 1 second and 24 hours.", ephemeral=True)
+            return
+
+        if max_uses <= 0 or max_uses > 100:  # Discord doesn't support more than 100 uses
+            await ctx.respond("Invite usage limit must be between 1 and 100.", ephemeral=True)
+            return
+
+        try:
+            invite = await ctx.author.voice.channel.create_invite(
+                max_age=max_age,
+                max_uses=max_uses,
+                unique=True
+            )
+            await ctx.respond(
+                f"Here is your invite link for **{ctx.author.voice.channel.name}**:\n{invite.url}\n"
+                f"Expires in {max_age/60} minutes | Max uses: {max_uses}"
+            )
+        except discord.Forbidden:
+            await ctx.respond("I lack the necessary permissions to create invites for this channel.", ephemeral=True)
+        except discord.HTTPException as e:
+            await ctx.respond(f"Failed to create invite: {e}", ephemeral=True)
+
+
+    @voice.command(name="privacy", description="Set the privacy of your current voice channel.")
+    async def privacy(
+        self,
+        ctx: discord.ApplicationContext,
+        mode: Option(
+            str,
+            "Choose the privacy mode: 'private' (only invitees can join) or 'public' (anyone can join).",
+            choices=["private", "public"],
+            required=True
+        ) # type: ignore
+    ):
+        """
+        Toggles privacy for the user's current voice channel.
+
+        Parameters:
+            ctx: The command's application context.
+            mode: The desired privacy mode: 'private' or 'public'.
+        """
+        # Ensure the user is in a voice channel
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.respond("You must be in a voice channel to use this command.", ephemeral=True)
+            return
+
+        channel = ctx.author.voice.channel
+
+        try:
+            if mode == "private":
+                # Remove @everyone's connect permission
+                await channel.set_permissions(ctx.guild.default_role, connect=False)
+                await ctx.respond(
+                    f"🔒 **{channel.name}** is now private. Only users with invites or specific roles can join."
+                )
+            elif mode == "public":
+                # Allow @everyone to connect
+                await channel.set_permissions(ctx.guild.default_role, connect=True)
+                await ctx.respond(f"🌐 **{channel.name}** is now public. Anyone can join.")
+        except discord.Forbidden:
+            await ctx.respond(
+                "I lack the necessary permissions to change the privacy settings of this channel.", ephemeral=True
+            )
+        except discord.HTTPException as e:
+            await ctx.respond(f"Failed to update privacy settings: {e}", ephemeral=True)
+
+
+    @voice.command(name="block", description="Blocks user from joining current voice channel")
+    async def block(self, ctx:discord.ApplicationContext, 
+                    user:discord.Member
+                    ):
+        """
+        Blocks a specified user from joining the current voice channel.
+
+        Parameters:
+            ctx: The application context of the command.
+            user: The member to block from the current voice channel.
+        """
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.respond("You must be in voice channel to use this command", ehpemeral=True)
+            return
+        
+        channel = ctx.author.voice.channel
+        
+        current_overerites = channel.overwrites_for(user)
+        if current_overerites.connect is False:
+            await ctx.respond(f"{user.display_name} is already blocked from joining the channel **{channel.name}**.", ephemeral=True)
+            return
+        
+        try:
+            await channel.set_permissions(user, connect=False)
+            await user.move_to(None)
+            await ctx.respond(f"🚫 {user.display_name} has been blocked from joining the channel **{channel.name}**.", ephemeral = True)
+        except discord.Forbidden:
+            await ctx.respond("I lack the necessary permissions to block this user.", ephemeral=True)
+        except discord.HTTPException as e:
+            await ctx.respond(f"Failed to block the user: {e}", ephemeral=True)
+
+
+    @voice.command(name="unblock", description="Unblocks a user from joining your current voice channel.")
+    async def unblock(
+        self,
+        ctx: discord.ApplicationContext,
+        user: discord.Member,
+    ):
+        """
+        Unblocks a specified user from joining the current voice channel.
+
+        Parameters:
+            ctx: The application context of the command.
+            user: The member to unblock from the current voice channel.
+        """
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.respond("You must be in a voice channel to use this command.", ephemeral=True)
+            return
+
+        channel = ctx.author.voice.channel
+
+        current_overwrites = channel.overwrites_for(user)
+        if current_overwrites.connect is None or current_overwrites.connect is True:
+            await ctx.respond(f"{user.display_name} is not currently blocked from **{channel.name}**.", ephemeral=True)
+            return
+
+        try:
+            await channel.set_permissions(user, overwrite=None)
+            await ctx.respond(f"✅ {user.display_name} has been unblocked from joining **{channel.name}**.")
+        except discord.Forbidden:
+            await ctx.respond("I lack the necessary permissions to unblock this user.", ephemeral=True)
+        except discord.HTTPException as e:
+            await ctx.respond(f"Failed to unblock the user: {e}", ephemeral=True)
 
 
 def setup(bot):
