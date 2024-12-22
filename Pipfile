@@ -5,6 +5,8 @@ name = "pypi"
 
 [packages]
 py-cord = {extras = ["voice"], version = "*"}
+pymongo = "*"
+dnspython = "*"
 
 [dev-packages]
 

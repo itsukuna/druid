@@ -17,7 +17,7 @@ LOGGING_CONFIG = {
     },
     'handlers': {
         'console': {
-            'level': 'DEBUG',
+            'level': 'INFO',
             'class': 'logging.StreamHandler',
             'formatter': 'standard',
         },
@@ -25,6 +25,12 @@ LOGGING_CONFIG = {
             'level': 'INFO',
             'class': 'logging.FileHandler',
             'filename': os.path.join(LOG_DIR, 'bot.log'),
+            'formatter': 'standard',
+        },
+        'database_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(LOG_DIR, 'database.log'),
             'formatter': 'standard',
         },
     },
@@ -38,7 +44,12 @@ LOGGING_CONFIG = {
             'handlers': ['console', 'bot_file'],
             'level': 'INFO',
             'propagate': False
-        },
+        },        
+        'mongodb':{
+            'handlers':['console','database_file'],
+            'level':'INFO',
+            'propagate':False
+        }
     }
 }
 
