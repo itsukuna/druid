@@ -3,7 +3,7 @@ from pymongo.server_api import ServerApi
 import os
 import logging
 
-uri = os.getenv("mango_db")
+uri = os.getenv("mangodb_uri")
 client = MongoClient(uri, server_api=ServerApi("1"))
 
 logger = logging.getLogger("mongodb")
@@ -95,3 +95,42 @@ class VoiceDB:
             logger.error(
                 f"Error updating owner of temporary channel {channel_id} for guild {guild_id}: {e}"
             )
+
+
+class AutoModDB:
+    def __init__(self):
+        self.client = client
+        self.db = self.client["automod_db"]
+
+    def add_bad_word(self, guild_id, word):
+        try:
+            self.db.bad_words.update_one(
+                {"guild_id": guild_id},
+                {"$addToSet": {"words": word}},
+                upsert=True,
+            )
+            logger.info(f"Added bad word '{word}' for guild {guild_id}")
+        except Exception as e:
+            logger.error(f"Error adding bad word '{word}' for guild {guild_id}: {e}")
+
+    def remove_bad_word(self, guild_id, word):
+        try:
+            self.db.bad_words.update_one(
+                {"guild_id": guild_id},
+                {"$pull": {"words": word}},
+                upsert=True,
+            )
+            logger.info(f"Removed bad word '{word}' for guild {guild_id}")
+        except Exception as e:
+            logger.error(f"Error removing bad word '{word}' for guild {guild_id}: {e}")
+
+    def get_bad_words(self, guild_id):
+        try:
+            record = self.db.bad_words.find_one({"guild_id": guild_id})
+            logger.info(
+                f"Bad words for guild {guild_id}: {record['words'] if record else 'None'}"
+            )
+            return record["words"] if record else []
+        except Exception as e:
+            logger.error(f"Error getting bad words for guild {guild_id}: {e}")
+            return []

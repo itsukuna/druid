@@ -23,7 +23,7 @@ class TempVoice(commands.Cog):
         guild_id = member.guild.id
         lobby_vc = discord.utils.get(
             member.guild.channels,
-            id=self.db.get_server_config(guild_id)["start_vc"]["id"],
+            id=self.db.get_server_config(guild_id)["voice_lobby"]["id"],
         )
         active_category = discord.utils.get(
             member.guild.categories,
@@ -86,7 +86,7 @@ class TempVoice(commands.Cog):
         guild_id = ctx.guild.id
         if not self.db.get_server_config(guild_id):
             lobby_category = await guild.create_category("voice lobby")
-            start_vc = await guild.create_voice_channel(
+            voice_lobby = await guild.create_voice_channel(
                 "start vc", category=lobby_category
             )
             active_category = await guild.create_category("active channels")
@@ -100,7 +100,7 @@ class TempVoice(commands.Cog):
                     "id": lobby_category.id,
                     "name": lobby_category.name,
                 },
-                "start_vc": {"id": start_vc.id, "name": start_vc.name},
+                "voice_lobby": {"id": voice_lobby.id, "name": voice_lobby.name},
                 "active_category": {
                     "id": active_category.id,
                     "name": active_category.name,
@@ -142,7 +142,7 @@ class TempVoice(commands.Cog):
                 lobby_category = ctx.guild.get_channel(config["lobby_category"]["id"])
                 active_category = ctx.guild.get_channel(config["active_category"]["id"])
                 rules_channel = ctx.guild.get_channel(config["rules_channel"]["id"])
-                start_vc = ctx.guild.get_channel(config["start_vc"]["id"])
+                voice_lobby = ctx.guild.get_channel(config["voice_lobby"]["id"])
 
                 if lobby_category:
                     await lobby_category.delete()
@@ -150,8 +150,8 @@ class TempVoice(commands.Cog):
                     await active_category.delete()
                 if rules_channel:
                     await rules_channel.delete()
-                if start_vc:
-                    await start_vc.delete()
+                if voice_lobby:
+                    await voice_lobby.delete()
 
                 await asyncio.sleep(0.5)
                 await ctx.respond(
@@ -178,6 +178,7 @@ class TempVoice(commands.Cog):
     @voice.command(
         name="cleanup", description="Cleanup temporary voice channels for your server."
     )
+    @commands.has_permissions(manage_channels=True)
     async def cleanup(self, ctx):
         guild_id = ctx.guild.id
         temp_channels = self.db.get_temp_channels(guild_id)

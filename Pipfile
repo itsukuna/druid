@@ -7,6 +7,7 @@ name = "pypi"
 py-cord = {extras = ["voice"], version = "*"}
 pymongo = "*"
 dnspython = "*"
+yt-dlp = "*"
 
 [dev-packages]
 
