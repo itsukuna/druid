@@ -3,7 +3,7 @@ from pymongo.server_api import ServerApi
 import os
 import logging
 
-uri = os.getenv("mangodb_uri")
+uri = os.getenv("mongodb_uri")
 client = MongoClient(uri, server_api=ServerApi("1"))
 
 logger = logging.getLogger("mongodb")

@@ -108,6 +108,40 @@ class TempVoice(commands.Cog):
                 "rules_channel": {"id": rules_channel.id, "name": rules_channel.name},
             }
             self.db.set_server_config(guild_id, server_config)
+
+            embed = discord.Embed(
+                title="📢 Voice Channel Rules and Commands",
+                description=(
+                    "Welcome to the **Voice Channel Rules and Commands** guide! "
+                    "Below are the rules to follow and the commands you can use to manage your temporary voice channels."
+                ),
+                color=discord.Color.blue(),
+            )
+            embed.add_field(
+                name="📜 Rules",
+                value=(
+                    "1. **Be respectful** to others.\n"
+                    "2. **No spamming or excessive noise**.\n"
+                    "3. Follow the server's **general rules**.\n"
+                    "\nViolating these rules may result in removal from the voice channel."
+                ),
+                inline=False,
+            )
+            embed.add_field(
+                name="🛠️ Commands",
+                value=(
+                    "`/voice rename <new_name>` - Rename your temporary voice channel.\n"
+                    "`/voice limit <number>` - Set a user limit for your temporary voice channel.\n"
+                    "`/voice privacy <public/private>` - Make your voice channel public or private.\n"
+                    "`/voice kick <user>` - Kick a user from your temporary voice channel.\n"
+                    "`/voice ban <user>` - Ban a user from your temporary voice channel.\n"
+                    "`/voice unban <user>` - Unban a user from your temporary voice channel.\n"
+                    "`/voice invite` - Generate an invite link for your temporary voice channel."
+                ),
+                inline=False,
+            )
+            await rules_channel.send(embed=embed)
+
             await ctx.respond("Server configuration has been created.", ephemeral=True)
             logger.info(f"Server configuration created for guild {guild_id}")
         else:
@@ -144,21 +178,30 @@ class TempVoice(commands.Cog):
                 rules_channel = ctx.guild.get_channel(config["rules_channel"]["id"])
                 voice_lobby = ctx.guild.get_channel(config["voice_lobby"]["id"])
 
-                if lobby_category:
-                    await lobby_category.delete()
-                if active_category:
-                    await active_category.delete()
-                if rules_channel:
-                    await rules_channel.delete()
                 if voice_lobby:
                     await voice_lobby.delete()
-
+                    logger.info(f"Deleted voice lobby for guild {guild_id}")
+                if rules_channel:
+                    await rules_channel.delete()
+                    logger.info(f"Deleted rules channel for guild {guild_id}")
+                if lobby_category:
+                    await lobby_category.delete()
+                    logger.info(f"Deleted lobby category for guild {guild_id}")
+                if active_category:
+                    await active_category.delete()
+                    logger.info(f"Deleted active category for guild {guild_id}")
+                
                 await asyncio.sleep(0.5)
                 await ctx.respond(
                     "Server configuration has been removed.", ephemeral=True
                 )
                 self.db.remove_server_config(guild_id)
                 logger.info(f"Server configuration removed for guild {guild_id}")
+            except discord.NotFound:
+                logger.error(f"Channel not found while resetting server configuration for guild {guild_id}")
+                await ctx.respond(
+                    "Error resetting server configuration: Channel not found.", ephemeral=True
+                )
             except Exception as e:
                 logger.error(
                     f"Error resetting server configuration for guild {guild_id}: {e}"

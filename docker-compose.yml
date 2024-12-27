@@ -1,0 +1,8 @@
+version: "3.12"
+
+services:
+  druid_bot:
+    build: .
+    env_file:
+      - .env
+    restart: always
