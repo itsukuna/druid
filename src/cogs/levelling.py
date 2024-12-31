@@ -285,25 +285,6 @@ class Leveling(commands.Cog):
         await ctx.respond("Reset XP boosters.", ephemeral=True)
         logger.info(f"Reset XP boosters in guild {guild_id}")
 
-    @xp.command(name="set_cooldown", description="Set the message cooldown.")
-    @commands.has_permissions(administrator=True)
-    async def set_cooldown(self, ctx, cooldown: int):
-        self.cooldown = cooldown
-        await ctx.respond(f"Set message cooldown to {cooldown} seconds.", ephemeral=True)
-        logger.info(f"Set message cooldown to {cooldown} seconds in guild {ctx.guild.id}")
-
-    @xp.command(name="set_voice_xp", description="Set the voice XP gain.")
-    @commands.has_permissions(administrator=True)
-    async def set_voice_xp(self, ctx, xp: int):
-        self.voice_xp = xp
-        await ctx.respond(f"Set voice XP gain to {xp}.", ephemeral=True)
-        logger.info(f"Set voice XP gain to {xp} in guild {ctx.guild.id}")
-    
-    @xp.command(name="set_voice_xp_interval", description="Set the voice XP interval.")
-    @commands.has_permissions(administrator=True)
-    async def set_voice_xp_interval(self, ctx, interval: int):
-        self.voice_xp_task.change_interval(minutes=interval)
-        await ctx.respond(f"Set voice XP interval to {interval} minutes.", ephemeral=True)
 def setup(bot):
     """
     Add the XP cog to the bot.
