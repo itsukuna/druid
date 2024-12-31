@@ -95,19 +95,6 @@ class Leveling(commands.Cog):
         except Exception as e:
             logger.error(f"Error processing voice state update for XP: {e}")
 
-    def get_role_booster(self, member):
-        booster = 1.0
-        for role in member.roles:
-            if role.id in self.role_boosters:
-                booster *= self.role_boosters[role.id]
-        return booster
-
-    def get_channel_booster(self, channel):
-        return self.channel_boosters.get(channel.id, 1.0)
-
-    def calculate_level(self, xp):
-        return math.floor(0.1 * math.sqrt(xp))
-
     async def level_up_announcement(self, channel, user, level):
         embed = discord.Embed(
             title="Level Up!",
@@ -182,41 +169,6 @@ class Leveling(commands.Cog):
             logger.error(f"Error fetching profile for user {user.id}: {e}")
             await ctx.respond("Error fetching profile.", ephemeral=True)
 
-    @xp.command(name="add_role_booster", description="Add a role-specific XP booster.")
-    @commands.has_permissions(administrator=True)
-    async def add_role_booster(self, ctx, role: discord.Role, multiplier: float):
-        self.role_boosters[role.id] = multiplier
-        await ctx.respond(f"Added XP booster for role {role.name} with multiplier {multiplier}.", ephemeral=True)
-        logger.info(f"Added XP booster for role {role.id} with multiplier {multiplier} in guild {ctx.guild.id}")
-
-    @xp.command(name="add_channel_booster", description="Add a channel-specific XP booster.")
-    @commands.has_permissions(administrator=True)
-    async def add_channel_booster(self, ctx, channel: discord.TextChannel, multiplier: float):
-        self.channel_boosters[channel.id] = multiplier
-        await ctx.respond(f"Added XP booster for channel {channel.name} with multiplier {multiplier}.", ephemeral=True)
-        logger.info(f"Added XP booster for channel {channel.id} with multiplier {multiplier} in guild {ctx.guild.id}")
-
-    @xp.command(name="remove_role_booster", description="Remove a role-specific XP booster.")
-    @commands.has_permissions(administrator=True)
-    async def remove_role_booster(self, ctx, role: discord.Role):
-        if role.id in self.role_boosters:
-            del self.role_boosters[role.id]
-            await ctx.respond(f"Removed XP booster for role {role.name}.", ephemeral=True)
-            logger.info(f"Removed XP booster for role {role.id} in guild {ctx.guild.id}")
-        else:
-            await ctx.respond(f"Role {role.name} does not have an XP booster.", ephemeral=True)
-
-    @xp.command(name="remove_channel_booster", description="Remove a channel-specific XP booster.")
-    @commands.has_permissions(administrator=True)
-    async def remove_channel_booster(self, ctx, channel: discord.TextChannel):
-        if channel.id in self.channel_boosters:
-            del self.channel_boosters[channel.id]
-            await ctx.respond(f"Removed XP booster for channel {channel.name}.", ephemeral=True)
-            logger.info(f"Removed XP booster for channel {channel.id} in guild {ctx.guild.id}")
-        else:
-            await ctx.respond(f"Channel {channel.name} does not have an XP booster.", ephemeral=True)
-
-    @xp.command(name="set_level", description="Set the level of a user.")
     @commands.has_permissions(administrator=True)
     async def set_level(self, ctx, user: discord.Member, level: int):
         guild_id = ctx.guild.id
@@ -275,15 +227,6 @@ class Leveling(commands.Cog):
         self.db.db.xp.delete_many({"guild_id": guild_id})
         await ctx.respond("Reset XP leaderboard.", ephemeral=True)
         logger.info(f"Reset XP leaderboard in guild {guild_id}")
-
-    @xp.command(name="reset_boosters", description="Reset all XP boosters.")
-    @commands.has_permissions(administrator=True)
-    async def reset_boosters(self, ctx):
-        guild_id = ctx.guild.id
-        self.role_boosters = {}
-        self.channel_boosters = {}
-        await ctx.respond("Reset XP boosters.", ephemeral=True)
-        logger.info(f"Reset XP boosters in guild {guild_id}")
 
 def setup(bot):
     """
