@@ -95,6 +95,9 @@ class Leveling(commands.Cog):
         except Exception as e:
             logger.error(f"Error processing voice state update for XP: {e}")
 
+    def calculate_level(self, xp):
+        return math.floor(0.1 * math.sqrt(xp))
+
     async def level_up_announcement(self, channel, user, level):
         embed = discord.Embed(
             title="Level Up!",
