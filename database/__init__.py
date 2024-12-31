@@ -74,9 +74,6 @@ class VoiceDB:
     def get_temp_channels(self, guild_id):
         try:
             record = self.db.temp_channels.find_one({"guild_id": guild_id})
-            logger.info(
-                f"Temporary channels for guild {guild_id}: {record['channels'] if record else 'None'}"
-            )
             return record["channels"] if record else []
         except Exception as e:
             logger.error(f"Error getting temporary channels for guild {guild_id}: {e}")
@@ -133,4 +130,55 @@ class AutoModDB:
             return record["words"] if record else []
         except Exception as e:
             logger.error(f"Error getting bad words for guild {guild_id}: {e}")
+            return []
+
+
+class LevelDB:
+    def __init__(self):
+        self.client = client
+        self.db = self.client["xp_db"]
+
+    def add_xp(self, guild_id, user_id, xp):
+        try:
+            self.db.xp.update_one(
+                {"guild_id": guild_id, "user_id": user_id},
+                {"$inc": {"xp": xp}, "$setOnInsert": {"level": 0}},
+                upsert=True,
+            )
+            logger.info(f"Added {xp} XP for user {user_id} in guild {guild_id}")
+        except Exception as e:
+            logger.error(f"Error adding XP for user {user_id} in guild {guild_id}: {e}")
+
+    def get_xp(self, guild_id, user_id):
+        try:
+            record = self.db.xp.find_one({"guild_id": guild_id, "user_id": user_id})
+            return record["xp"] if record else 0
+        except Exception as e:
+            logger.error(f"Error getting XP for user {user_id} in guild {guild_id}: {e}")
+            return 0
+
+    def get_level(self, guild_id, user_id):
+        try:
+            record = self.db.xp.find_one({"guild_id": guild_id, "user_id": user_id})
+            return record["level"] if record else 0
+        except Exception as e:
+            logger.error(f"Error getting level for user {user_id} in guild {guild_id}: {e}")
+            return 0
+
+    def set_level(self, guild_id, user_id, level):
+        try:
+            self.db.xp.update_one(
+                {"guild_id": guild_id, "user_id": user_id},
+                {"$set": {"level": level}},
+                upsert=True,
+            )
+            logger.info(f"Set level {level} for user {user_id} in guild {guild_id}")
+        except Exception as e:
+            logger.error(f"Error setting level for user {user_id} in guild {guild_id}: {e}")
+
+    def get_leaderboard(self, guild_id):
+        try:
+            return list(self.db.xp.find({"guild_id": guild_id}).sort("xp", -1).limit(10))
+        except Exception as e:
+            logger.error(f"Error getting leaderboard for guild {guild_id}: {e}")
             return []
