@@ -13,9 +13,6 @@ class Leveling(commands.Cog):
         self.bot = bot
         self.db = LevelDB()
         self.cooldowns = {}
-        self.role_boosters = {}
-        self.channel_boosters = {}
-        pass
 
     def cog_unload(self):
         self.voice_xp_task.cancel()
@@ -56,8 +53,6 @@ class Leveling(commands.Cog):
 
         try:
             xp_gain = len(message.content) / 20
-            xp_gain *= self.get_role_booster(message.author)
-            xp_gain *= self.get_channel_booster(message.channel)
             self.db.add_xp(guild_id, user_id, xp_gain)
             self.cooldowns[user_id] = asyncio.get_event_loop().time() + 60
 
@@ -107,10 +102,7 @@ class Leveling(commands.Cog):
         embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/1323598442970218526.png") #change emoji id to your own
         embed.set_footer(text=f"Congratulations!")
         await channel.send(embed=embed)
-    """
-    This command group contains various commands for managing and interacting with the XP system.
-    Commands include viewing leaderboards, checking user ranks, adding/removing XP, and setting XP boosters.
-    """
+
     xp = discord.SlashCommandGroup(name="xp", description="Commands for the XP system.")
 
     @xp.command(name="leaderboard", description="Show the XP leaderboard.")
