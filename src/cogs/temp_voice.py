@@ -5,6 +5,7 @@ from discord import Option
 import logging
 import discord
 import asyncio
+import error
 
 logger = logging.getLogger("discord")
 
@@ -13,6 +14,23 @@ class TempVoice(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db = VoiceDB()
+
+    def in_voice_channel(self, ctx):
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            raise error.invalidVoiceChannel("You are not in a voice channel.")
+    
+    def is_owner(self, ctx, action):
+        temp_channels = self.db.get_temp_channels(ctx.guild.id)
+        if ctx.author.voice.channel.id not in[
+            ch["channel_id"] for ch in temp_channels
+        ]:
+            raise error.Ownership(f"You are not in a temporary voice channel.")
+        if ctx.author.id not in [
+            ch["owner_id"]
+            for ch in temp_channels
+            if ch["channel_id"] == ctx.author.voice.channel.id
+        ]:
+            raise error.Ownership(f"Only the channel owner can {action}.")
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -248,25 +266,11 @@ class TempVoice(commands.Cog):
 
     @voice.command(name="rename", description="Rename a temporary voice channel.")
     async def rename(self, ctx: discord.ApplicationContext, new_name: str):
-        if not ctx.author.voice or not ctx.author.voice.channel:
-            await ctx.respond("You are not in a voice channel.", ephemeral=True)
-            return
-        temp_channels = self.db.get_temp_channels(ctx.guild.id)
-        if ctx.author.voice.channel.id not in [
-            ch["channel_id"] for ch in temp_channels
-        ]:
-            await ctx.respond(
-                "You can only rename your own temporary voice channel.", ephemeral=True
-            )
-            return
-        if ctx.author.id not in [
-            ch["owner_id"]
-            for ch in temp_channels
-            if ch["channel_id"] == ctx.author.voice.channel.id
-        ]:
-            await ctx.respond(
-                "Only the channel owner can rename the channel.", ephemeral=True
-            )
+        try:
+            self.in_voice_channel(ctx)
+            self.is_owner(ctx, "rename the channel")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx.respond(str(e), ephemeral=True)
             return
         if len(new_name) > 100:
             await ctx.respond(
@@ -291,14 +295,11 @@ class TempVoice(commands.Cog):
         name="limit", description="Set a user limit for a temporary voice channel."
     )
     async def limit(self, ctx, limit: int):
-        if not ctx.author.voice or not ctx.author.voice.channel:
-            await ctx.respond("You are not in a voice channel.", ephemeral=True)
-            return
-        temp_channels = self.db.get_temp_channels(ctx.guild.id)
-        if ctx.author.voice.channel.id not in [
-            ch["channel_id"] for ch in temp_channels
-        ]:
-            await ctx.respond("Only owners can set channel limit.", ephemeral=True)
+        try:
+            self.in_voice_channel(ctx)
+            self.is_owner(ctx, "set a user limit")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx.respond(str(e), ephemeral=True)
             return
         if limit < 0 or limit > 99:
             await ctx.respond("Limit must be between 0 and 99.", ephemeral=True)
@@ -320,14 +321,11 @@ class TempVoice(commands.Cog):
     )
     async def privacy(self, ctx, mode: Option(str, choices=["public", "private"])):  # type: ignore
         channel = ctx.author.voice.channel
-        if not ctx.author.voice or not channel:
-            await ctx.respond("You are not in a voice channel.", ephemeral=True)
-            return
-        temp_channels = self.db.get_temp_channels(ctx.guild.id)
-        if ctx.author.voice.channel.id not in [
-            ch["channel_id"] for ch in temp_channels
-        ]:
-            await ctx.respond("Only owners can change channel privacy.", ephemeral=True)
+        try:
+            self.in_voice_channel(ctx)
+            self.is_owner(ctx, "change the channel privacy")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx.respond(str(e), ephemeral=True)
             return
         try:
             if mode == "public":
@@ -348,14 +346,11 @@ class TempVoice(commands.Cog):
         name="kick", description="Kick a user from a temporary voice channel."
     )
     async def kick(self, ctx, member: discord.Member):
-        if not ctx.author.voice or not ctx.author.voice.channel:
-            await ctx.respond("You are not in a voice channel.", ephemeral=True)
-            return
-        temp_channels = self.db.get_temp_channels(ctx.guild.id)
-        if ctx.author.voice.channel.id not in [
-            ch["channel_id"] for ch in temp_channels
-        ]:
-            await ctx.respond("Only owners can kick users.", ephemeral=True)
+        try:
+            self.in_voice_channel(ctx)
+            self.is_owner(ctx, "kick a user")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx.respond(str(e), ephemeral=True)
             return
         if member.voice and member.voice.channel == ctx.author.voice.channel:
             try:
@@ -376,15 +371,13 @@ class TempVoice(commands.Cog):
     async def ban(self, ctx, member: discord.Member):
         channel = ctx.author.voice.channel
         current_overwrites = channel.overwrites_for(member)
-        if not ctx.author.voice or not channel:
-            await ctx.respond("You are not in a voice channel.", ephemeral=True)
+        try:
+            self.in_voice_channel(ctx)
+            self.is_owner(ctx, "ban a user")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx.respond(str(e), ephemeral=True)
             return
-        temp_channels = self.db.get_temp_channels(ctx.guild.id)
-        if ctx.author.voice.channel.id not in [
-            ch["channel_id"] for ch in temp_channels
-        ]:
-            await ctx.respond("Only owners can ban users.", ephemeral=True)
-            return
+        
         if current_overwrites.connect is False:
             await ctx.respond(
                 f"{member.display_name} is already banned.", ephemeral=True
@@ -412,15 +405,13 @@ class TempVoice(commands.Cog):
     async def unban(self, ctx, member: discord.Member):
         channel = ctx.author.voice.channel
         current_overwrites = channel.overwrites_for(member)
-        if not ctx.author.voice or not channel:
-            await ctx.respond("You are not in a voice channel.", ephemeral=True)
+        try:
+            self.in_voice_channel(ctx)
+            self.is_owner(ctx, "unban a user")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx.respond(str(e), ephemeral=True)
             return
-        temp_channels = self.db.get_temp_channels(ctx.guild.id)
-        if ctx.author.voice.channel.id not in [
-            ch["channel_id"] for ch in temp_channels
-        ]:
-            await ctx.respond("Only owners can unban users.", ephemeral=True)
-            return
+        
         if current_overwrites.connect is True:
             await ctx.respond(f"{member.display_name} is not banned.", ephemeral=True)
             return
@@ -443,14 +434,11 @@ class TempVoice(commands.Cog):
         name="invite", description="Invite a user to a temporary voice channel."
     )
     async def invite(self, ctx, max_age: int = 3600, max_usage: int = 5):
-        if not ctx.author.voice or not ctx.author.voice.channel:
-            await ctx.respond("You are not in a voice channel.", ephemeral=True)
-            return
-        temp_channels = self.db.get_temp_channels(ctx.guild.id)
-        if ctx.author.voice.channel.id not in [
-            ch["channel_id"] for ch in temp_channels
-        ]:
-            await ctx.respond("Only owners can invite users.", ephemeral=True)
+        try:
+            self.in_voice_channel(ctx)
+            self.is_owner(ctx, "create an invite")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx.respond(str(e), ephemeral=True)
             return
         try:
             invite = await ctx.author.voice.channel.create_invite(
