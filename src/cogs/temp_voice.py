@@ -1,6 +1,7 @@
 from database import VoiceDB
 from discord.ext import commands
 from discord import Option
+from discord.ui import View, Button, Modal, InputText
 
 import logging
 import discord
@@ -16,21 +17,33 @@ class TempVoice(commands.Cog):
         self.db = VoiceDB()
 
     def in_voice_channel(self, ctx):
-        if not ctx.author.voice or not ctx.author.voice.channel:
+        user=self.get_user(ctx)
+        if not user.voice or not user.voice.channel:
             raise error.invalidVoiceChannel("You are not in a voice channel.")
     
     def is_owner(self, ctx, action):
+        """Helper function to check ownership of voice channel"""
         temp_channels = self.db.get_temp_channels(ctx.guild.id)
-        if ctx.author.voice.channel.id not in[
+        user = self.get_user(ctx)
+        if user.voice.channel.id not in[
             ch["channel_id"] for ch in temp_channels
         ]:
             raise error.Ownership(f"You are not in a temporary voice channel.")
-        if ctx.author.id not in [
+        if user.id not in [
             ch["owner_id"]
             for ch in temp_channels
-            if ch["channel_id"] == ctx.author.voice.channel.id
+            if ch["channel_id"] == user.voice.channel.id
         ]:
             raise error.Ownership(f"Only the channel owner can {action}.")
+        
+    def get_user(self, ctx_or_interaction):
+        """Helper function to extract the user from either a command context or an interaction."""
+        if isinstance(ctx_or_interaction, discord.ApplicationContext):
+            return ctx_or_interaction.author
+        elif isinstance(ctx_or_interaction, discord.Interaction):
+            return ctx_or_interaction.user
+        else:
+            raise ValueError("Invalid context or interaction")
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -158,7 +171,20 @@ class TempVoice(commands.Cog):
                 ),
                 inline=False,
             )
-            await rules_channel.send(embed=embed)
+            view = View()
+            button_labels = {
+                "Rename": "rename",
+                "Limit": "limit",
+                "Privacy": "privacy",
+                "Kick": "kick",
+                "Ban": "ban",
+                "Unban": "unban",
+                "Invite": "invite"
+            }
+            for label, custom_id in button_labels.items():
+                view.add_item(Button(label=label, style=discord.ButtonStyle.secondary, custom_id=custom_id))
+
+            await rules_channel.send(embed=embed, view=view)
 
             await ctx.respond("Server configuration has been created.", ephemeral=True)
             logger.info(f"Server configuration created for guild {guild_id}")
@@ -175,7 +201,7 @@ class TempVoice(commands.Cog):
             await ctx.respond(
                 "You do not have permission to use this command.", ephemeral=True
             )
-        logger.error("Error setting up server configuration.{error}")
+        logger.error(f"Error setting up server configuration.{error}")
 
     @voice.command(name="reset", description="Reset the configuration for your server.")
     @commands.has_permissions(manage_channels=True)
@@ -234,7 +260,7 @@ class TempVoice(commands.Cog):
             await ctx.respond(
                 "You do not have permission to use this command.", ephemeral=True
             )
-        logger.error("Error resetting server configuration.{error}")
+        logger.error(f"Error resetting server configuration.{error}")
 
     @voice.command(
         name="cleanup", description="Cleanup temporary voice channels for your server."
@@ -266,30 +292,7 @@ class TempVoice(commands.Cog):
 
     @voice.command(name="rename", description="Rename a temporary voice channel.")
     async def rename(self, ctx: discord.ApplicationContext, new_name: str):
-        try:
-            self.in_voice_channel(ctx)
-            self.is_owner(ctx, "rename the channel")
-        except (error.invalidVoiceChannel, error.Ownership) as e:
-            await ctx.respond(str(e), ephemeral=True)
-            return
-        if len(new_name) > 100:
-            await ctx.respond(
-                "Channel name is too long must be under 100 characters.", ephemeral=True
-            )
-            return
-        try:
-            await ctx.author.voice.channel.edit(name=new_name)
-            await ctx.respond(
-                f"Channel name has been changed to {new_name}.", ephemeral=True
-            )
-            logger.info(
-                f"Renamed temporary channel to {new_name} for guild {ctx.guild.id}"
-            )
-        except Exception as e:
-            logger.error(
-                f"Error renaming temporary channel for guild {ctx.guild.id}: {e}"
-            )
-            await ctx.respond("Error renaming channel.", ephemeral=True)
+        await self.rename_channel(ctx, new_name)
 
     @voice.command(
         name="limit", description="Set a user limit for a temporary voice channel."
@@ -464,6 +467,73 @@ class TempVoice(commands.Cog):
                 f"HTTP error creating invite for temporary channel in guild {ctx.guild.id}: {e}"
             )
 
+    async def rename_channel(self, ctx_or_interaction, new_name: str):
+        user = self.get_user(ctx_or_interaction)
+        try:
+            self.in_voice_channel(ctx_or_interaction)
+            self.is_owner(ctx_or_interaction, "rename the channel")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx_or_interaction.response.send_message(str(e), ephemeral=True)
+            return
+
+        if len(new_name) > 100:
+            await ctx_or_interaction.response.send_message(
+                "Channel name is too long, must be under 100 characters.", ephemeral=True
+            )
+            return
+
+        try:
+            await user.voice.channel.edit(name=new_name)
+            await ctx_or_interaction.response.send_message(
+                f"Channel name has been changed to {new_name}.", ephemeral=True
+            )
+            logger.info(
+                f"Renamed temporary channel to {new_name} for guild {ctx_or_interaction.guild.id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Error renaming temporary channel for guild {ctx_or_interaction.guild.id}: {e}"
+            )
+            await ctx_or_interaction.response.send_message("Error renaming channel.", ephemeral=True)
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        if interaction.type == discord.InteractionType.component:
+            match interaction.data.get("custom_id"):
+                case "rename":
+                    await interaction.response.send_modal(Controls("Rename Channel", "New Name", self))
+                case "limit":
+                    pass
+                case "privacy":
+                    pass
+                case "kick":
+                    pass
+                case "ban":
+                    pass
+                case "unban":
+                    pass
+class Controls(Modal):
+    def __init__(self, title, label, cog):
+        super().__init__(title=title, timeout=300)
+        self.add_item(InputText(label=label))
+        self.cog = cog
+    
+    async def callback(self, interaction):
+        new_value = self.children[0].value
+        match self.title:
+            case "Rename Channel":
+                await self.cog.rename_channel(interaction, new_value)
+            case "Set Limit":
+                pass
+            case "Kick":
+                pass
+            case "Ban":
+                pass
+            case "Unban":
+                pass
+            case "Invite":
+                pass
+            
 
 def setup(bot):
     bot.add_cog(TempVoice(bot))
