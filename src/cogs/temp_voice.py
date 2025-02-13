@@ -397,37 +397,10 @@ class TempVoice(commands.Cog):
     @voice.command(
         name="invite", description="Invite a user to a temporary voice channel."
     )
-    async def invite(self, ctx, max_age: int = 3600, max_usage: int = 5):
-        try:
-            self.in_voice_channel(ctx)
-            self.is_owner(ctx, "create an invite")
-        except (error.invalidVoiceChannel, error.Ownership) as e:
-            await ctx.respond(str(e), ephemeral=True)
-            return
-        try:
-            invite = await ctx.author.voice.channel.create_invite(
-                max_age=max_age, max_uses=max_usage
-            )
-            await ctx.respond(
-                f"Here is your invite link for **{ctx.author.voice.channel.name}**:\n{invite.url}\n"
-                f"Expires in {max_age/60} minutes | Max uses: {max_usage}",
-                ephemeral=True,
-            )
-            logger.info(f"Created invite for temporary channel in guild {ctx.guild.id}")
-        except discord.Forbidden:
-            await ctx.respond(
-                "I lack the necessary permissions to create invites for this channel.",
-                ephemeral=True,
-            )
-            logger.error(
-                f"Permission error creating invite for temporary channel in guild {ctx.guild.id}"
-            )
-        except discord.HTTPException as e:
-            await ctx.respond(f"Failed to create invite: {e}", ephemeral=True)
-            logger.error(
-                f"HTTP error creating invite for temporary channel in guild {ctx.guild.id}: {e}"
-            )
+    async def invite(self, ctx):
+        await self.new_invite(ctx)
 
+    #Helper functions
     async def rename_channel(self, ctx_or_interaction, new_name: str):
         user = self.get_user(ctx_or_interaction)
         try:
@@ -508,6 +481,38 @@ class TempVoice(commands.Cog):
             logger.error(f"Error changing channel privacy in guild {ctx_or_interaction.guild.id}: {e}")
             await ctx_or_interaction.respond("⚠️ Error changing channel privacy.", ephemeral=True)
 
+    async def new_invite(self, ctx_or_interaction, max_age: int = 3600, max_usage: int = 5):
+        user = self.get_user(ctx_or_interaction)
+        try:
+            self.in_voice_channel(ctx_or_interaction)
+            self.is_owner(ctx_or_interaction, "create an invite")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx_or_interaction.respond(str(e), ephemeral=True)
+            return
+        try:
+            invite = await user.voice.channel.create_invite(
+                max_age=max_age, max_uses=max_usage
+            )
+            await ctx_or_interaction.respond(
+                f"Here is your invite link for **{user.voice.channel.name}**:\n{invite.url}\n"
+                f"Expires in {max_age/60} minutes | Max uses: {max_usage}",
+                ephemeral=True,
+            )
+            logger.info(f"Created invite for temporary channel in guild {ctx_or_interaction.guild.id}")
+        except discord.Forbidden:
+            await ctx_or_interaction.respond(
+                "I lack the necessary permissions to create invites for this channel.",
+                ephemeral=True,
+            )
+            logger.error(
+                f"Permission error creating invite for temporary channel in guild {ctx_or_interaction.guild.id}"
+            )
+        except discord.HTTPException as e:
+            await ctx_or_interaction.respond(f"Failed to create invite: {e}", ephemeral=True)
+            logger.error(
+                f"HTTP error creating invite for temporary channel in guild {ctx_or_interaction.guild.id}: {e}"
+            )
+
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if interaction.type == discord.InteractionType.component:
@@ -524,6 +529,8 @@ class TempVoice(commands.Cog):
                     pass
                 case "unban":
                     pass
+                case "invite":
+                    await self.new_invite(interaction)
 
 class Controls(Modal):
     def __init__(self, title, label, cog):
