@@ -298,26 +298,7 @@ class TempVoice(commands.Cog):
         name="limit", description="Set a user limit for a temporary voice channel."
     )
     async def limit(self, ctx, limit: int):
-        try:
-            self.in_voice_channel(ctx)
-            self.is_owner(ctx, "set a user limit")
-        except (error.invalidVoiceChannel, error.Ownership) as e:
-            await ctx.respond(str(e), ephemeral=True)
-            return
-        if limit < 0 or limit > 99:
-            await ctx.respond("Limit must be between 0 and 99.", ephemeral=True)
-            return
-        try:
-            await ctx.author.voice.channel.edit(user_limit=limit)
-            await ctx.respond(f"User limit has been set to {limit}.", ephemeral=True)
-            logger.info(
-                f"Set user limit to {limit} for temporary channel in guild {ctx.guild.id}"
-            )
-        except Exception as e:
-            logger.error(
-                f"Error setting user limit for temporary channel in guild {ctx.guild.id}: {e}"
-            )
-            await ctx.respond("Error setting user limit.", ephemeral=True)
+        await self.set_limit(ctx, limit)
 
     @voice.command(
         name="privacy", description="Make a temporary voice channel private or public."
@@ -496,6 +477,30 @@ class TempVoice(commands.Cog):
             )
             await ctx_or_interaction.response.send_message("Error renaming channel.", ephemeral=True)
 
+
+    async def set_limit(self, ctx_or_interaction, limit: int):
+        user = self.get_user(ctx_or_interaction)
+        try:
+            self.in_voice_channel(ctx_or_interaction)
+            self.is_owner(ctx_or_interaction, "set a user limit")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx_or_interaction.respond(str(e), ephemeral=True)
+            return
+        if limit < 0 or limit > 99:
+            await ctx_or_interaction.respond("Limit must be between 0 and 99.", ephemeral=True)
+            return
+        try:
+            await user.voice.channel.edit(user_limit=limit)
+            await ctx_or_interaction.respond(f"User limit has been set to {limit}.", ephemeral=True)
+            logger.info(
+                f"Set user limit to {limit} for temporary channel in guild {ctx_or_interaction.guild.id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Error setting user limit for temporary channel in guild {ctx_or_interaction.guild.id}: {e}"
+            )
+            await ctx_or_interaction.respond("Error setting user limit.", ephemeral=True)
+
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if interaction.type == discord.InteractionType.component:
@@ -503,7 +508,7 @@ class TempVoice(commands.Cog):
                 case "rename":
                     await interaction.response.send_modal(Controls("Rename Channel", "New Name", self))
                 case "limit":
-                    pass
+                    await interaction.response.send_modal(Controls("Set Limit", "User Limit", self))
                 case "privacy":
                     pass
                 case "kick":
@@ -512,6 +517,7 @@ class TempVoice(commands.Cog):
                     pass
                 case "unban":
                     pass
+
 class Controls(Modal):
     def __init__(self, title, label, cog):
         super().__init__(title=title, timeout=300)
@@ -524,7 +530,7 @@ class Controls(Modal):
             case "Rename Channel":
                 await self.cog.rename_channel(interaction, new_value)
             case "Set Limit":
-                pass
+                await self.cog.set_limit(interaction, int(new_value))
             case "Kick":
                 pass
             case "Ban":
