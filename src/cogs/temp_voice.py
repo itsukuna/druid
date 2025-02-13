@@ -303,28 +303,8 @@ class TempVoice(commands.Cog):
     @voice.command(
         name="privacy", description="Make a temporary voice channel private or public."
     )
-    async def privacy(self, ctx, mode: Option(str, choices=["public", "private"])):  # type: ignore
-        channel = ctx.author.voice.channel
-        try:
-            self.in_voice_channel(ctx)
-            self.is_owner(ctx, "change the channel privacy")
-        except (error.invalidVoiceChannel, error.Ownership) as e:
-            await ctx.respond(str(e), ephemeral=True)
-            return
-        try:
-            if mode == "public":
-                await channel.set_permissions(ctx.guild.default_role, connect=True)
-                await ctx.respond("Channel is now public.", ephemeral=True)
-                logger.info(f"Set temporary channel to public in guild {ctx.guild.id}")
-            elif mode == "private":
-                await channel.set_permissions(ctx.guild.default_role, connect=False)
-                await ctx.respond("Channel is now private.", ephemeral=True)
-                logger.info(f"Set temporary channel to private in guild {ctx.guild.id}")
-        except Exception as e:
-            logger.error(
-                f"Error changing channel privacy for temporary channel in guild {ctx.guild.id}: {e}"
-            )
-            await ctx.respond("Error changing channel privacy.", ephemeral=True)
+    async def privacy(self, ctx):
+        await self.set_privacy(ctx)
 
     @voice.command(
         name="kick", description="Kick a user from a temporary voice channel."
@@ -477,7 +457,6 @@ class TempVoice(commands.Cog):
             )
             await ctx_or_interaction.response.send_message("Error renaming channel.", ephemeral=True)
 
-
     async def set_limit(self, ctx_or_interaction, limit: int):
         user = self.get_user(ctx_or_interaction)
         try:
@@ -501,6 +480,34 @@ class TempVoice(commands.Cog):
             )
             await ctx_or_interaction.respond("Error setting user limit.", ephemeral=True)
 
+    async def set_privacy(self, ctx_or_interaction):
+        """Toggles the privacy of a temporary voice channel between public and private."""
+        user = self.get_user(ctx_or_interaction)
+        try:
+            self.in_voice_channel(ctx_or_interaction)
+            self.is_owner(ctx_or_interaction, "change the channel privacy")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx_or_interaction.respond(str(e), ephemeral=True)
+            return
+        
+        channel = user.voice.channel
+        try:
+            if channel.overwrites_for(ctx_or_interaction.guild.default_role).connect is False:
+                await channel.set_permissions(ctx_or_interaction.guild.default_role, connect=True)
+                await ctx_or_interaction.respond("Channel is now public.", ephemeral=True)
+                logger.info(
+                    f"Set temporary channel to public for guild {ctx_or_interaction.guild.id}"
+                )
+            else:
+                await channel.set_permissions(ctx_or_interaction.guild.default_role, connect=False)
+                await ctx_or_interaction.respond("Channel is now private.", ephemeral=True)
+                logger.info(
+                    f"Set temporary channel to private for guild {ctx_or_interaction.guild.id}"
+                )
+        except Exception as e:
+            logger.error(f"Error changing channel privacy in guild {ctx_or_interaction.guild.id}: {e}")
+            await ctx_or_interaction.respond("⚠️ Error changing channel privacy.", ephemeral=True)
+
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if interaction.type == discord.InteractionType.component:
@@ -510,7 +517,7 @@ class TempVoice(commands.Cog):
                 case "limit":
                     await interaction.response.send_modal(Controls("Set Limit", "User Limit", self))
                 case "privacy":
-                    pass
+                    await self.set_privacy(interaction)
                 case "kick":
                     pass
                 case "ban":
