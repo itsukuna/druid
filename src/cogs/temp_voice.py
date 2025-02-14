@@ -309,39 +309,11 @@ class TempVoice(commands.Cog):
         name="kick", description="Kick a user from a temporary voice channel."
     )
     async def kick(self, ctx):
-        await self.get_voice_members(ctx)
+        await self.get_voice_members(ctx, "kick")
 
     @voice.command(name="ban", description="Ban a user from a temporary voice channel.")
-    async def ban(self, ctx, member: discord.Member):
-        channel = ctx.author.voice.channel
-        current_overwrites = channel.overwrites_for(member)
-        try:
-            self.in_voice_channel(ctx)
-            self.is_owner(ctx, "ban a user")
-        except (error.invalidVoiceChannel, error.Ownership) as e:
-            await ctx.respond(str(e), ephemeral=True)
-            return
-        
-        if current_overwrites.connect is False:
-            await ctx.respond(
-                f"{member.display_name} is already banned.", ephemeral=True
-            )
-            return
-        if member.voice and member.voice.channel == ctx.author.voice.channel:
-            try:
-                await member.move_to(None)
-                await channel.set_permissions(member, connect=False)
-                await ctx.respond(
-                    f"{member.display_name} has been banned.", ephemeral=True
-                )
-                logger.info(
-                    f"Banned {member.display_name} from temporary channel in guild {ctx.guild.id}"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Error banning {member.display_name} from temporary channel in guild {ctx.guild.id}: {e}"
-                )
-                await ctx.respond("Error banning user.", ephemeral=True)
+    async def ban(self, ctx):
+        await self.get_voice_members(ctx, "ban")
 
     @voice.command(
         name="unban", description="Unban a user from a temporary voice channel."
@@ -493,7 +465,7 @@ class TempVoice(commands.Cog):
                 f"HTTP error creating invite for temporary channel in guild {ctx_or_interaction.guild.id}: {e}"
             )
 
-    async def get_voice_members(self, ctx_or_interaction):
+    async def get_voice_members(self, ctx_or_interaction, action):
         user = self.get_user(ctx_or_interaction)
         try:
             self.in_voice_channel(ctx_or_interaction)
@@ -504,7 +476,7 @@ class TempVoice(commands.Cog):
         
         if user.voice and user.voice.channel:
             members = user.voice.channel.members
-            await ctx_or_interaction.respond(view=UserSelectionView(members), ephemeral=True)
+            await ctx_or_interaction.respond(view=UserSelectionView(members, action), ephemeral=True)
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
@@ -517,9 +489,9 @@ class TempVoice(commands.Cog):
                 case "privacy":
                     await self.set_privacy(interaction)
                 case "kick":
-                    await self.get_voice_members(interaction)
+                    await self.get_voice_members(interaction, "kick")
                 case "ban":
-                    pass
+                    await self.get_voice_members(interaction, "ban")
                 case "unban":
                     pass
                 case "invite":
@@ -540,26 +512,56 @@ class Controls(Modal):
                 await self.cog.set_limit(interaction, int(new_value))
 
 class UserSelectionView(View):
-    def __init__(self, members):
+    def __init__(self, members, action):
         super().__init__(timeout=60)
-        self.add_item(UserSelect(members))
+        self.add_item(UserSelect(members, action))
 
 class UserSelect(discord.ui.Select):
-    def __init__(self, members):
+    def __init__(self, members, action):
         options =[
             discord.SelectOption(label=member.name, value=str(member.id))
             for member in members
         ]
+        self.action = action
         super().__init__(placeholder="Select a user...", options=options)
     
     async def callback(self, interaction: discord.Interaction):
         """Handles selection."""
         selected_user_id = int(self.values[0])
         selected_user = interaction.guild.get_member(selected_user_id)
+        channel = interaction.user.voice.channel
+        current_overwrites = channel.overwrites_for(selected_user)
 
         if selected_user and selected_user.voice:
-            await selected_user.move_to(None)
-            await interaction.response.send_message(f"✅ {selected_user.mention} has been kicked.", ephemeral=True)
+            match self.action:
+                case "kick":
+                    await selected_user.move_to(None)
+                    await interaction.response.send_message(f"{selected_user.mention} has been kicked.", ephemeral=True)
+
+                case "ban":
+                    if current_overwrites.connect is False:
+                        await interaction.respond(
+                            f"{selected_user.display_name} is already banned.", ephemeral=True
+                        )
+                        return
+                    try:
+                        await selected_user.move_to(None)
+                        await channel.set_permissions(selected_user, connect=False)
+                        await channel.set_permissions(selected_user, view_channel=False)
+                        await interaction.response.send_message(
+                            f"{selected_user.display_name} has been banned.", ephemeral=True
+                        )
+                        logger.info(
+                            f"Banned {selected_user.display_name} from temporary channel in guild {interaction.guild.id}"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Error banning {selected_user.display_name} from temporary channel in guild {interaction.guild.id}: {e}"
+                        )
+                        await interaction.respond("Error banning user.", ephemeral=True)
+
+                case "unban":
+                    pass
 
 def setup(bot):
     bot.add_cog(TempVoice(bot))
