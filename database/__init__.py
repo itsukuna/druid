@@ -95,11 +95,15 @@ class VoiceDB:
 
     def add_banned_user(self, guild_id, channel_id, user_id):
         self.db.banned_users.update_one(
-            {"guild_id": guild_id, "channel_id": channel_id},
-            {"$addToSet": {"banned_users": user_id}},
-            upsert=True
+            {"guild_id": guild_id},
+            {
+                "$addToSet": {
+                    f"channels.{channel_id}.banned_users": user_id
+                }
+            },
+            upsert=True 
         )
-        logger.info("banned list updated")
+        logger.info(f"Added banned user {user_id} to guild {guild_id}, channel {channel_id}")
     
     def remove_banned_user(self, guild_id, channel_id, user_id):
         self.db.banned_users.update_one(
