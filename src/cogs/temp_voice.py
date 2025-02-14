@@ -1,6 +1,5 @@
 from database import VoiceDB
 from discord.ext import commands
-from discord import Option
 from discord.ui import View, Button, Modal, InputText
 
 import logging
@@ -309,27 +308,8 @@ class TempVoice(commands.Cog):
     @voice.command(
         name="kick", description="Kick a user from a temporary voice channel."
     )
-    async def kick(self, ctx, member: discord.Member):
-        try:
-            self.in_voice_channel(ctx)
-            self.is_owner(ctx, "kick a user")
-        except (error.invalidVoiceChannel, error.Ownership) as e:
-            await ctx.respond(str(e), ephemeral=True)
-            return
-        if member.voice and member.voice.channel == ctx.author.voice.channel:
-            try:
-                await member.move_to(None)
-                await ctx.respond(
-                    f"{member.display_name} has been kicked.", ephemeral=True
-                )
-                logger.info(
-                    f"Kicked {member.display_name} from temporary channel in guild {ctx.guild.id}"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Error kicking {member.display_name} from temporary channel in guild {ctx.guild.id}: {e}"
-                )
-                await ctx.respond("Error kicking user.", ephemeral=True)
+    async def kick(self, ctx):
+        await self.get_voice_members(ctx)
 
     @voice.command(name="ban", description="Ban a user from a temporary voice channel.")
     async def ban(self, ctx, member: discord.Member):
@@ -513,6 +493,19 @@ class TempVoice(commands.Cog):
                 f"HTTP error creating invite for temporary channel in guild {ctx_or_interaction.guild.id}: {e}"
             )
 
+    async def get_voice_members(self, ctx_or_interaction):
+        user = self.get_user(ctx_or_interaction)
+        try:
+            self.in_voice_channel(ctx_or_interaction)
+            self.is_owner(ctx_or_interaction, "kick a user")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx_or_interaction.respond(str(e), ephemeral=True)
+            return
+        
+        if user.voice and user.voice.channel:
+            members = user.voice.channel.members
+            await ctx_or_interaction.respond(view=UserSelectionView(members), ephemeral=True)
+
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if interaction.type == discord.InteractionType.component:
@@ -524,7 +517,7 @@ class TempVoice(commands.Cog):
                 case "privacy":
                     await self.set_privacy(interaction)
                 case "kick":
-                    pass
+                    await self.get_voice_members(interaction)
                 case "ban":
                     pass
                 case "unban":
@@ -545,15 +538,28 @@ class Controls(Modal):
                 await self.cog.rename_channel(interaction, new_value)
             case "Set Limit":
                 await self.cog.set_limit(interaction, int(new_value))
-            case "Kick":
-                pass
-            case "Ban":
-                pass
-            case "Unban":
-                pass
-            case "Invite":
-                pass
-            
+
+class UserSelectionView(View):
+    def __init__(self, members):
+        super().__init__(timeout=60)
+        self.add_item(UserSelect(members))
+
+class UserSelect(discord.ui.Select):
+    def __init__(self, members):
+        options =[
+            discord.SelectOption(label=member.name, value=str(member.id))
+            for member in members
+        ]
+        super().__init__(placeholder="Select a user...", options=options)
+    
+    async def callback(self, interaction: discord.Interaction):
+        """Handles selection."""
+        selected_user_id = int(self.values[0])
+        selected_user = interaction.guild.get_member(selected_user_id)
+
+        if selected_user and selected_user.voice:
+            await selected_user.move_to(None)
+            await interaction.response.send_message(f"✅ {selected_user.mention} has been kicked.", ephemeral=True)
 
 def setup(bot):
     bot.add_cog(TempVoice(bot))
