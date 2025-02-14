@@ -318,33 +318,8 @@ class TempVoice(commands.Cog):
     @voice.command(
         name="unban", description="Unban a user from a temporary voice channel."
     )
-    async def unban(self, ctx, member: discord.Member):
-        channel = ctx.author.voice.channel
-        current_overwrites = channel.overwrites_for(member)
-        try:
-            self.in_voice_channel(ctx)
-            self.is_owner(ctx, "unban a user")
-        except (error.invalidVoiceChannel, error.Ownership) as e:
-            await ctx.respond(str(e), ephemeral=True)
-            return
-        
-        if current_overwrites.connect is True:
-            await ctx.respond(f"{member.display_name} is not banned.", ephemeral=True)
-            return
-        else:
-            try:
-                await channel.set_permissions(member, connect=True)
-                await ctx.respond(
-                    f"{member.display_name} has been unbanned.", ephemeral=True
-                )
-                logger.info(
-                    f"Unbanned {member.display_name} from temporary channel in guild {ctx.guild.id}"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Error unbanning {member.display_name} from temporary channel in guild {ctx.guild.id}: {e}"
-                )
-                await ctx.respond("Error unbanning user.", ephemeral=True)
+    async def unban(self, ctx):
+        await self.get_banned_user(ctx, "unban")
 
     @voice.command(
         name="invite", description="Invite a user to a temporary voice channel."
@@ -476,7 +451,35 @@ class TempVoice(commands.Cog):
         
         if user.voice and user.voice.channel:
             members = user.voice.channel.members
-            await ctx_or_interaction.respond(view=UserSelectionView(members, action), ephemeral=True)
+            await ctx_or_interaction.respond(view=UserSelectionView(members, action, self), ephemeral=True)
+
+    async def get_banned_user(self, ctx_or_interaction, action):
+        """Fetches banned users and allows selection for unbanning."""
+        user = self.get_user(ctx_or_interaction)
+
+        try:
+            self.in_voice_channel(ctx_or_interaction)
+            self.is_owner(ctx_or_interaction, "unban a user")
+        except (error.invalidVoiceChannel, error.Ownership) as e:
+            await ctx_or_interaction.respond(str(e), ephemeral=True)
+            return
+
+        channel = user.voice.channel
+        banned_user_ids = self.db.get_banned_users(ctx_or_interaction.guild.id, channel.id)
+
+        if not banned_user_ids:
+            await ctx_or_interaction.respond("No users are banned from this channel.", ephemeral=True)
+            return
+
+        # Convert user IDs to `discord.Member` objects (skip users who left the server)
+        banned_members = [ctx_or_interaction.guild.get_member(user_id) for user_id in banned_user_ids if ctx_or_interaction.guild.get_member(user_id)]
+
+        if not banned_members:
+            await ctx_or_interaction.respond("No banned users are currently in the server.", ephemeral=True)
+            return
+
+        await ctx_or_interaction.respond(view=UserSelectionView(banned_members, action, self), ephemeral=True)
+
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
@@ -493,7 +496,7 @@ class TempVoice(commands.Cog):
                 case "ban":
                     await self.get_voice_members(interaction, "ban")
                 case "unban":
-                    pass
+                    await self.get_banned_user(interaction, "unban")
                 case "invite":
                     await self.new_invite(interaction)
 
@@ -512,25 +515,26 @@ class Controls(Modal):
                 await self.cog.set_limit(interaction, int(new_value))
 
 class UserSelectionView(View):
-    def __init__(self, members, action):
+    def __init__(self, members, action, cog):
         super().__init__(timeout=60)
-        self.add_item(UserSelect(members, action))
+        self.add_item(UserSelect(members, action, cog))
 
 class UserSelect(discord.ui.Select):
-    def __init__(self, members, action):
+    def __init__(self, members, action, cog):
         options =[
             discord.SelectOption(label=member.name, value=str(member.id))
             for member in members
         ]
         self.action = action
+        self.cog = cog
         super().__init__(placeholder="Select a user...", options=options)
     
     async def callback(self, interaction: discord.Interaction):
         """Handles selection."""
         selected_user_id = int(self.values[0])
+        logger.info(selected_user_id)
         selected_user = interaction.guild.get_member(selected_user_id)
         channel = interaction.user.voice.channel
-        current_overwrites = channel.overwrites_for(selected_user)
 
         if selected_user and selected_user.voice:
             match self.action:
@@ -539,6 +543,7 @@ class UserSelect(discord.ui.Select):
                     await interaction.response.send_message(f"{selected_user.mention} has been kicked.", ephemeral=True)
 
                 case "ban":
+                    current_overwrites = channel.overwrites_for(selected_user)
                     if current_overwrites.connect is False:
                         await interaction.respond(
                             f"{selected_user.display_name} is already banned.", ephemeral=True
@@ -546,8 +551,8 @@ class UserSelect(discord.ui.Select):
                         return
                     try:
                         await selected_user.move_to(None)
-                        await channel.set_permissions(selected_user, connect=False)
-                        await channel.set_permissions(selected_user, view_channel=False)
+                        await channel.set_permissions(selected_user, connect=False, view_channel=False)
+                        self.cog.db.add_banned_user(interaction.guild.id, channel.id, selected_user.id)
                         await interaction.response.send_message(
                             f"{selected_user.display_name} has been banned.", ephemeral=True
                         )
@@ -561,7 +566,21 @@ class UserSelect(discord.ui.Select):
                         await interaction.respond("Error banning user.", ephemeral=True)
 
                 case "unban":
-                    pass
+                    try:
+                        await channel.set_permissions(selected_user, connect=True, view_channel=True)
+                        await interaction.response.send_message(
+                            f"{selected_user.display_name} has been unbanned.", ephemeral=True
+                        )
+                        self.cog.db.remove_banned_user(interaction.guild.id, channel.id, selected_user_id)
+                        logger.info(
+                            f"Unbanned {selected_user.display_name} from temporary channel in guild {interaction.guild.id}"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Error unbanning {selected_user.display_name} from temporary channel in guild {interaction.guild.id}: {e}"
+                        )
+                        await interaction.response.send_message("Error unbanning user.", ephemeral=True)
+
 
 def setup(bot):
     bot.add_cog(TempVoice(bot))

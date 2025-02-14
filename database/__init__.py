@@ -93,6 +93,28 @@ class VoiceDB:
                 f"Error updating owner of temporary channel {channel_id} for guild {guild_id}: {e}"
             )
 
+    def add_banned_user(self, guild_id, channel_id, user_id):
+        self.db.banned_users.update_one(
+            {"guild_id": guild_id, "channel_id": channel_id},
+            {"$addToSet": {"banned_users": user_id}},
+            upsert=True
+        )
+        logger.info("banned list updated")
+    
+    def remove_banned_user(self, guild_id, channel_id, user_id):
+        self.db.banned_users.update_one(
+            {"guild_id": guild_id, "channel_id": channel_id},
+            {"$pull": {"banned_users": user_id}}
+        )
+
+    def get_banned_users(self, guild_id, channel_id):
+        """Gets a list of banned user IDs for a specific voice channel."""
+        result = self.db.banned_users.find_one(
+            {"guild_id": guild_id, "channel_id": channel_id},
+            {"banned_users": 1, "_id": 0}
+        )
+        return result.get("banned_users", []) if result else []
+
 
 class AutoModDB:
     def __init__(self):
