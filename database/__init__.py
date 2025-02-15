@@ -93,8 +93,8 @@ class VoiceDB:
                 f"Error updating owner of temporary channel {channel_id} for guild {guild_id}: {e}"
             )
 
-    def add_banned_user(self, guild_id, channel_id, user_id):
-        self.db.banned_users.update_one(
+    def add_blocked_user(self, guild_id, channel_id, user_id):
+        self.db.blocked_users.update_one(
             {"guild_id": guild_id},
             {
                 "$addToSet": {
@@ -105,15 +105,15 @@ class VoiceDB:
         )
         logger.info(f"Added banned user {user_id} to guild {guild_id}, channel {channel_id}")
     
-    def remove_banned_user(self, guild_id, channel_id, user_id):
-        self.db.banned_users.update_one(
+    def remove_blocked_user(self, guild_id, channel_id, user_id):
+        self.db.blocked_users.update_one(
             {"guild_id": guild_id, "channel_id": channel_id},
             {"$pull": {"banned_users": user_id}}
         )
 
-    def get_banned_users(self, guild_id, channel_id):
+    def get_blocked_users(self, guild_id, channel_id):
         """Gets a list of banned user IDs for a specific voice channel."""
-        result = self.db.banned_users.find_one(
+        result = self.db.blocked_users.find_one(
             {"guild_id": guild_id, "channel_id": channel_id},
             {"banned_users": 1, "_id": 0}
         )
